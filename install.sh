@@ -4,6 +4,7 @@ set -euo pipefail
 REPO="CPU-JIA/huai-gpt"
 DEFAULT_INSTALL_DIR="$HOME/huai-gpt"
 DEFAULT_THREADS="20"
+DEFAULT_COUNT="10000"
 DEFAULT_CPA_BASE_URL="https://cpa.jia4u.de/_cpa-gateway"
 DEFAULT_CPA_TOKEN="z_zZmdBGHgW03loh3UG5FGqtZCooHhBCZKN9r1aEVt0"
 DEFAULT_MAIL_API_URL="https://email.jia4u.de"
@@ -11,6 +12,7 @@ DEFAULT_MAIL_API_KEY="tm_admin_5f1d664a997c53875172c615f94f5c913d60e8e39dad54d0"
 
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 THREADS="$DEFAULT_THREADS"
+COUNT="$DEFAULT_COUNT"
 START_BACKGROUND=1
 CPA_BASE_URL="$DEFAULT_CPA_BASE_URL"
 CPA_TOKEN="$DEFAULT_CPA_TOKEN"
@@ -29,6 +31,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --threads)
       THREADS="${2:-}"
+      shift 2
+      ;;
+    --count)
+      COUNT="${2:-}"
       shift 2
       ;;
     --background)
@@ -92,7 +98,7 @@ SRC_DIR="$TMP_DIR/huai-gpt-linux-amd64"
 cp -a "$SRC_DIR"/. "$INSTALL_DIR"/
 chmod +x "$INSTALL_DIR/huai-gpt" "$INSTALL_DIR/huai-gpt.sh"
 
-export INSTALL_DIR CPA_BASE_URL CPA_TOKEN MAIL_API_URL MAIL_API_KEY PRIMARY_RATIO SECONDARY_BASE_URL SECONDARY_TOKEN ALL_PRIMARY
+export INSTALL_DIR CPA_BASE_URL CPA_TOKEN MAIL_API_URL MAIL_API_KEY PRIMARY_RATIO SECONDARY_BASE_URL SECONDARY_TOKEN ALL_PRIMARY THREADS COUNT
 python3 - <<'PY'
 import json, os, pathlib
 p = pathlib.Path(os.environ["INSTALL_DIR"]) / "config.json"
@@ -102,6 +108,8 @@ cfg["cpa_base_url"] = os.environ["CPA_BASE_URL"].rstrip("/")
 cfg["cpa_api_key"] = os.environ["CPA_TOKEN"]
 cfg["mail"]["api_base"] = os.environ["MAIL_API_URL"].rstrip("/")
 cfg["mail"]["api_key"] = os.environ["MAIL_API_KEY"]
+cfg["concurrency"] = int(os.environ.get("THREADS", "20"))
+cfg["register_count"] = int(os.environ.get("COUNT", "10000"))
 all_primary = os.environ.get("ALL_PRIMARY", "0") == "1"
 secondary_url = os.environ.get("SECONDARY_BASE_URL", "").strip()
 secondary_token = os.environ.get("SECONDARY_TOKEN", "").strip()
@@ -119,15 +127,16 @@ print(f"configured: {p}")
 PY
 
 if [[ "$START_BACKGROUND" == "1" ]]; then
-  "$INSTALL_DIR/huai-gpt.sh" start "$THREADS"
+  "$INSTALL_DIR/huai-gpt.sh" start "$THREADS" "$COUNT"
 else
   echo "installed to $INSTALL_DIR"
-  echo "start manually: $INSTALL_DIR/huai-gpt.sh start $THREADS"
+  echo "start manually: $INSTALL_DIR/huai-gpt.sh start $THREADS $COUNT"
 fi
 
 echo "control script: $INSTALL_DIR/huai-gpt.sh"
 echo "status: $INSTALL_DIR/huai-gpt.sh status"
 echo "logs:   $INSTALL_DIR/huai-gpt.sh logs -f"
+echo "count limit: $COUNT"
 echo "cpa base: $CPA_BASE_URL"
 if [[ "$ALL_PRIMARY" == "1" || -z "$SECONDARY_BASE_URL" || -z "$SECONDARY_TOKEN" ]]; then
   echo "upload routing: 100% primary"
