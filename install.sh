@@ -3,25 +3,28 @@ set -euo pipefail
 
 REPO="CPU-JIA/huai-gpt"
 DEFAULT_INSTALL_DIR="$HOME/huai-gpt"
-DEFAULT_THREADS="20"
-DEFAULT_COUNT="10000"
-DEFAULT_CPA_BASE_URL="https://cpa.jia4u.de/_cpa-gateway"
-DEFAULT_CPA_TOKEN="z_zZmdBGHgW03loh3UG5FGqtZCooHhBCZKN9r1aEVt0"
+DEFAULT_WORKER_COUNT="20"
+DEFAULT_TARGET_COUNT="10000"
+DEFAULT_RUN_MODE="fixed"
+DEFAULT_PANEL_PORT="26410"
+DEFAULT_PRIMARY_CPA_URL="https://cpa.jia4u.de"
+DEFAULT_PRIMARY_CPA_TOKEN="z_zZmdBGHgW03loh3UG5FGqtZCooHhBCZKN9r1aEVt0"
 DEFAULT_MAIL_API_URL="https://email.jia4u.de"
 DEFAULT_MAIL_API_KEY="tm_admin_5f1d664a997c53875172c615f94f5c913d60e8e39dad54d0"
 
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-THREADS="$DEFAULT_THREADS"
-COUNT="$DEFAULT_COUNT"
+WORKER_COUNT="$DEFAULT_WORKER_COUNT"
+TARGET_COUNT="$DEFAULT_TARGET_COUNT"
+RUN_MODE="$DEFAULT_RUN_MODE"
+PANEL_PORT="$DEFAULT_PANEL_PORT"
+PANEL_TOKEN=""
 START_BACKGROUND=1
-CPA_BASE_URL="$DEFAULT_CPA_BASE_URL"
-CPA_TOKEN="$DEFAULT_CPA_TOKEN"
-MAIL_API_URL="$DEFAULT_MAIL_API_URL"
-MAIL_API_KEY="$DEFAULT_MAIL_API_KEY"
-PRIMARY_RATIO=""
-SECONDARY_BASE_URL=""
-SECONDARY_TOKEN=""
-ALL_PRIMARY=0
+PRIMARY_CPA_URL="$DEFAULT_PRIMARY_CPA_URL"
+PRIMARY_CPA_TOKEN="$DEFAULT_PRIMARY_CPA_TOKEN"
+PRIMARY_SHARE=""
+SECONDARY_CPA_URL=""
+SECONDARY_CPA_TOKEN=""
+PRIMARY_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,12 +32,24 @@ while [[ $# -gt 0 ]]; do
       INSTALL_DIR="${2:-}"
       shift 2
       ;;
-    --threads)
-      THREADS="${2:-}"
+    --worker-count|--threads)
+      WORKER_COUNT="${2:-}"
       shift 2
       ;;
-    --count)
-      COUNT="${2:-}"
+    --target-count|--count)
+      TARGET_COUNT="${2:-}"
+      shift 2
+      ;;
+    --run-mode)
+      RUN_MODE="${2:-}"
+      shift 2
+      ;;
+    --panel-port)
+      PANEL_PORT="${2:-}"
+      shift 2
+      ;;
+    --panel-token)
+      PANEL_TOKEN="${2:-}"
       shift 2
       ;;
     --background)
@@ -45,28 +60,28 @@ while [[ $# -gt 0 ]]; do
       START_BACKGROUND=0
       shift
       ;;
-    --cpa-base-url)
-      CPA_BASE_URL="${2:-}"
+    --primary-cpa-url)
+      PRIMARY_CPA_URL="${2:-}"
       shift 2
       ;;
-    --cpa-token)
-      CPA_TOKEN="${2:-}"
+    --primary-cpa-token)
+      PRIMARY_CPA_TOKEN="${2:-}"
       shift 2
       ;;
-    --primary-ratio)
-      PRIMARY_RATIO="${2:-}"
+    --secondary-cpa-url)
+      SECONDARY_CPA_URL="${2:-}"
       shift 2
       ;;
-    --cpa-secondary-base-url)
-      SECONDARY_BASE_URL="${2:-}"
+    --secondary-cpa-token)
+      SECONDARY_CPA_TOKEN="${2:-}"
       shift 2
       ;;
-    --cpa-secondary-token)
-      SECONDARY_TOKEN="${2:-}"
+    --primary-share)
+      PRIMARY_SHARE="${2:-}"
       shift 2
       ;;
-    --all-primary)
-      ALL_PRIMARY=1
+    --primary-only)
+      PRIMARY_ONLY=1
       shift
       ;;
     *)
@@ -75,6 +90,14 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$PANEL_TOKEN" ]]; then
+  PANEL_TOKEN="$(python3 - <<'PY'
+import secrets
+print("panel_" + secrets.token_urlsafe(24))
+PY
+)"
+fi
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -98,48 +121,65 @@ SRC_DIR="$TMP_DIR/huai-gpt-linux-amd64"
 cp -a "$SRC_DIR"/. "$INSTALL_DIR"/
 chmod +x "$INSTALL_DIR/huai-gpt" "$INSTALL_DIR/huai-gpt.sh"
 
-export INSTALL_DIR CPA_BASE_URL CPA_TOKEN MAIL_API_URL MAIL_API_KEY PRIMARY_RATIO SECONDARY_BASE_URL SECONDARY_TOKEN ALL_PRIMARY THREADS COUNT
+export INSTALL_DIR WORKER_COUNT TARGET_COUNT RUN_MODE PANEL_PORT PANEL_TOKEN PRIMARY_CPA_URL PRIMARY_CPA_TOKEN PRIMARY_SHARE SECONDARY_CPA_URL SECONDARY_CPA_TOKEN PRIMARY_ONLY
 python3 - <<'PY'
 import json, os, pathlib
 p = pathlib.Path(os.environ["INSTALL_DIR"]) / "config.json"
 cfg = json.loads(p.read_text(encoding="utf-8"))
+cfg["mail"]["api_base"] = "https://email.jia4u.de"
+cfg["mail"]["api_key"] = "tm_admin_5f1d664a997c53875172c615f94f5c913d60e8e39dad54d0"
+cfg["concurrency"] = int(os.environ.get("WORKER_COUNT", "20"))
+cfg["register_count"] = int(os.environ.get("TARGET_COUNT", "10000"))
+cfg["run_mode"] = os.environ.get("RUN_MODE", "fixed").strip() or "fixed"
+cfg["panel_bind"] = "0.0.0.0"
+cfg["panel_port"] = int(os.environ.get("PANEL_PORT", "26410"))
+cfg["panel_token"] = os.environ.get("PANEL_TOKEN", "").strip()
+
 cfg["cpa_upload_enabled"] = True
-cfg["cpa_base_url"] = os.environ["CPA_BASE_URL"].rstrip("/")
-cfg["cpa_api_key"] = os.environ["CPA_TOKEN"]
-cfg["mail"]["api_base"] = os.environ["MAIL_API_URL"].rstrip("/")
-cfg["mail"]["api_key"] = os.environ["MAIL_API_KEY"]
-cfg["concurrency"] = int(os.environ.get("THREADS", "20"))
-cfg["register_count"] = int(os.environ.get("COUNT", "10000"))
-all_primary = os.environ.get("ALL_PRIMARY", "0") == "1"
-secondary_url = os.environ.get("SECONDARY_BASE_URL", "").strip()
-secondary_token = os.environ.get("SECONDARY_TOKEN", "").strip()
-ratio = os.environ.get("PRIMARY_RATIO", "").strip()
-if all_primary or not (secondary_url and secondary_token):
-    cfg["cpa_secondary_enabled"] = False
-    cfg["cpa_primary_ratio"] = 100
-else:
-    cfg["cpa_secondary_enabled"] = True
-    cfg["cpa_secondary_base_url"] = secondary_url.rstrip("/")
-    cfg["cpa_secondary_api_key"] = secondary_token
-    cfg["cpa_primary_ratio"] = int(ratio or 70)
+cfg["cpa_base_url"] = os.environ["PRIMARY_CPA_URL"].rstrip("/")
+cfg["cpa_api_key"] = os.environ["PRIMARY_CPA_TOKEN"]
+cfg["cpa_upload_path"] = "/v0/management/auth-files"
+cfg["cpa_upload_field_name"] = "file"
+cfg["cpa_platform_name"] = "cpa_primary"
+cfg["cpa_upload_mode"] = "multipart"
+cfg["cpa_token_header_mode"] = "bearer_and_management"
+
+secondary_url = os.environ.get("SECONDARY_CPA_URL", "").strip()
+secondary_token = os.environ.get("SECONDARY_CPA_TOKEN", "").strip()
+primary_only = os.environ.get("PRIMARY_ONLY", "0") == "1"
+share = os.environ.get("PRIMARY_SHARE", "").strip()
+secondary_enabled = bool(secondary_url and secondary_token) and not primary_only
+cfg["cpa_secondary_enabled"] = secondary_enabled
+cfg["cpa_secondary_base_url"] = secondary_url.rstrip("/")
+cfg["cpa_secondary_api_key"] = secondary_token
+cfg["cpa_secondary_upload_path"] = "/v0/management/auth-files"
+cfg["cpa_secondary_upload_field_name"] = "file"
+cfg["cpa_secondary_platform_name"] = "cpa_secondary"
+cfg["cpa_secondary_upload_mode"] = "multipart"
+cfg["cpa_secondary_token_header_mode"] = "bearer_and_management"
+cfg["cpa_primary_ratio"] = int(share or 70) if secondary_enabled else 100
+
 p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 print(f"configured: {p}")
 PY
 
 if [[ "$START_BACKGROUND" == "1" ]]; then
-  "$INSTALL_DIR/huai-gpt.sh" start "$THREADS" "$COUNT"
+  "$INSTALL_DIR/huai-gpt.sh" start "$WORKER_COUNT" "$TARGET_COUNT" "$RUN_MODE" "$PANEL_PORT"
 else
   echo "installed to $INSTALL_DIR"
-  echo "start manually: $INSTALL_DIR/huai-gpt.sh start $THREADS $COUNT"
+  echo "start manually: $INSTALL_DIR/huai-gpt.sh start $WORKER_COUNT $TARGET_COUNT $RUN_MODE $PANEL_PORT"
 fi
 
 echo "control script: $INSTALL_DIR/huai-gpt.sh"
 echo "status: $INSTALL_DIR/huai-gpt.sh status"
 echo "logs:   $INSTALL_DIR/huai-gpt.sh logs -f"
-echo "count limit: $COUNT"
-echo "cpa base: $CPA_BASE_URL"
-if [[ "$ALL_PRIMARY" == "1" || -z "$SECONDARY_BASE_URL" || -z "$SECONDARY_TOKEN" ]]; then
-  echo "upload routing: 100% primary"
+echo "panel url:  http://127.0.0.1:$PANEL_PORT"
+echo "panel token: $PANEL_TOKEN"
+echo "run mode: $RUN_MODE"
+echo "target count: $TARGET_COUNT"
+echo "worker count: $WORKER_COUNT"
+if [[ "$PRIMARY_ONLY" == "1" || -z "$SECONDARY_CPA_URL" || -z "$SECONDARY_CPA_TOKEN" ]]; then
+  echo "upload routing: 100% primary CPA"
 else
-  echo "upload routing: ${PRIMARY_RATIO:-70}% primary / $((100-${PRIMARY_RATIO:-70}))% secondary"
+  echo "upload routing: ${PRIMARY_SHARE:-70}% primary CPA / $((100-${PRIMARY_SHARE:-70}))% secondary CPA"
 fi
