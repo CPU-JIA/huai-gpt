@@ -4,12 +4,16 @@ Artifact-only repo.
 
 This repo intentionally does **not** contain source code.
 
-## Files
+## Install
 
-- `install.sh`
+```bash
+curl -fsSL https://raw.githubusercontent.com/CPU-JIA/huai-gpt/main/install.sh | bash
+```
+
+## Artifacts
+
+Release assets are attached under GitHub Releases:
+
+- `huai-gpt-linux-amd64.tar.gz`
 - `huai-gpt-windows-amd64.zip`
-- `SHA256SUMS.txt`
-
-## Note
-
-Current repo is artifact-only. Linux release artifacts should be uploaded separately after local/offline build.
+- `install.sh`
