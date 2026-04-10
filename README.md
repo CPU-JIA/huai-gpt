@@ -20,6 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CPU-JIA/huai-gpt/main/install.sh | 
 
 ## 双老 CPA 通道（70/30）
 
+两个通道都为 **老 CPA 上传通道**：
 - 主通道：默认预置
 - 第二通道：你自行提供
 
@@ -47,33 +48,33 @@ curl -fsSL https://raw.githubusercontent.com/CPU-JIA/huai-gpt/main/install.sh | 
   --panel-port 26410
 ```
 
-## 面板
-
-- 默认地址：`http://<server-ip>:26410`
-- 面板 Token：安装时自动生成并打印
-- 鉴权方式：Token 登录
-
 ## 参数说明
 
 - `--worker-count <n>`：并发数，默认 `20`
 - `--target-count <n>`：目标数量，默认 `10000`
 - `--run-mode <fixed|replenish>`：固定成功数 / 补号模式
 - `--panel-port <n>`：面板端口，默认 `26410`
-- `--panel-token <token>`：自定义面板 token
 - `--primary-only`：强制 100% 走主通道
-- `--primary-cpa-url`：主 CPA 地址
-- `--primary-cpa-token`：主 CPA token
 - `--secondary-cpa-url`：第二 CPA 地址
 - `--secondary-cpa-token`：第二 CPA token
 - `--primary-share <n>`：主通道比例，默认 `70`
+
+## 面板
+
+- 默认地址：`http://<server-ip>:26410`
+- 面板 token 由安装脚本自动生成并打印
 
 ## 邮箱域名解析
 
 ### 如果只用根域
 
+添加：
+
 - `MX 10 email.jia4u.de`
 
 ### 如果还要无限子域
+
+再加一条：
 
 - `* MX 10 email.jia4u.de`
 
